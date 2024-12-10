@@ -1,0 +1,354 @@
+---
+title: "Week 4 Homework"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+**Question 9.1** Using the same crime data set `uscrime.txt` as in Question 8.2, apply Principal Component Analysis and then create a regression model using the first few principal components. Specify your new model in terms of the original variables (not the principal components), and compare its quality to that of your solution to Question 8.2. You can use the R function `prcomp` for PCA. (Note that to first scale the data, you can include `scale. = TRUE` to scale as part of the PCA function. Don’t forget that, to make a prediction for the new city, you’ll need to unscale the coefficients (i.e., do the scaling calculation in reverse)!)
+
+We will use the `prcomp` function in the `stats` library for PCA, and the library `factoextra` for visualization.
+
+```{r}
+library(stats)
+library(factoextra)
+```
+
+```{r}
+set.seed(42)
+```
+
+```{r}
+# load data
+crime <- read.delim("../week 4 data-summer/data 9.1/uscrime.txt")
+head(crime)
+```
+
+Using `prcomp`, apply PCA to the predictors of our `uscrime.txt` dataset.
+
+```{r}
+# apply pca
+crime_pca <- prcomp(crime[,1:15], center=T, scale = T)
+crime_pca
+```
+
+We can visualize the eigenvalues in a scree plot against the number of principal components used. This plot shows us the percentage of variances explained by each principal component.
+
+```{r}
+# scree plot
+fviz_eig(crime_pca)
+```
+
+From the scree plot, we can see that after 4-5 principal components, the increase in variance explained becomes relatively small around 5 components. There is less and less of an advantage in using more components after the 5th component. We will proceed to build linear regression model with these 5 components.
+
+```{r}
+# create new crime dataframe with first 5 components
+top5_components <- crime_pca$x[,1:5] # get first 5 cols of PCA components
+PCAcrime <- as.data.frame(cbind(top5_components, crime[,16])) # create df with response column
+PCAcrime
+```
+
+```{r}
+# build pca linear regression model
+model1 <- lm(V6~., data=PCAcrime)
+summary(model1)
+```
+
+Now we have to unscale our coefficients, expressing our principal components in terms of the original variables.
+
+Let's see our PCA coefficients and intercept first:
+
+```{r}
+# lr coefficients using pca components
+scaled_coefficients <- model1$coefficients[2:6]
+scaled_coefficients
+```
+
+```{r}
+# lr intercept using pca components
+scaled_intercept <- model1$coefficients[1]
+scaled_intercept
+```
+
+We also need to obtain the eigenvectors for each variable.
+
+```{r}
+# implied regression coefficients for x_j from pca
+eigenvectors <- crime_pca$rotation[,1:5]%*%scaled_coefficients
+eigenvectors
+```
+
+Then, we can transform our scaled coefficients to obtain the unscaled coefficients and intercept.
+
+```{r}
+# unscaled coefficients
+unscaled_coefficients <- eigenvectors/crime_pca$scale
+unscaled_coefficients
+```
+
+```{r}
+# unscaled intercept
+unscaled_intercept <- scaled_intercept - sum(eigenvectors 
+                                             *crime_pca$center
+                                             /crime_pca$scale)
+unscaled_intercept
+```
+
+Next, let's compare our PCA model to our base linear regression model from 8.2.
+
+As a refresher, here is the model and the metrics from 8.2:
+
+```{r}
+# build base linear regression model
+model2 <- lm(Crime~., data=crime)
+model2
+```
+
+```{r}
+# r-squared of base linear regression model
+print(sprintf("base lm r-squared: %0.3f", summary(model2)$r.squared))
+```
+
+```{r}
+# rmse of base linear regression model
+print(sprintf("base lm rmse: %0.3f", sigma(model2)))
+```
+
+And the model and metrics of the PCA model for this week.
+
+```{r}
+# unscaled pca linear regression model
+y_pred <- unscaled_intercept + as.matrix(crime[,1:15])%*%unscaled_coefficients
+
+# rsquared of pca linear regression model
+rss <- sum((y_pred-crime[,16])^2)
+tss <- sum((crime[,16]-mean(crime[,16]))^2)
+rsquared <- 1-rss/tss
+print(sprintf("pca lm r-squared: %0.3f", rsquared))
+```
+
+```{r}
+# rmse of pca linear regression model
+rmse <- sqrt(mean((crime[,16]-y_pred)^2))
+print(sprintf("pca lm rmse: %0.3f", rmse))
+```
+
+Using our PCA model to make a prediction on the sample data (given in 8.2):
+
+```{r}
+# create dataframe from sample input from 8.2
+sample <- data.frame(M = 14.0,
+                     So = 0,
+                     Ed = 10.0,
+                     Po1 = 12.0, 
+                     Po2 = 15.5,
+                     LF = 0.640,
+                     M.F = 94.0,
+                     Pop = 150,
+                     NW = 1.1,
+                     U1 = 0.120,
+                     U2 = 3.6, 
+                     Wealth = 3200, 
+                     Ineq = 20.1, 
+                     Prob = 0.04, 
+                     Time = 39.0)
+```
+
+```{r}
+# make prediction with pca model
+pred_pca <- unscaled_intercept + as.matrix(sample)%*%unscaled_coefficients
+pred_pca
+```
+
+We can see that comparatively, the PCA linear model has a lower $R^2$ value than the base model (PCA: 0.645, Base: 0.803), and a higher RMSE compared to the base model (PCA: 227.913, Base: 209.064). However, remember that the base model was extremely over-fitted on the training data and resulted in a highly inaccurate prediction of 155. Then we removed predictors that we deemed insignificant and created a second model that ended up with a prediction of 1304. Our PCA model is more in line with this latter model with a prediction of 1388. Thus although our PCA model explains less of the data (lower $R^2$) and has a higher error (higher RMSE) compared to the base model, it is less over-fitted and generates a more accurate prediction.
+
+**Question 10.1 (a)** Using the same crime data set uscrime.txt as in Questions 8.2 and 9.1, find the best model you can using (a) a regression tree model, and (b) a random forest model. In R, you can use the `tree` package or the `rpart` package, and the `randomForest` package. For each model, describe one or two qualitative takeaways you get from analyzing the results (i.e., don’t just stop when you have a good model, but interpret it too).
+
+We are using the same dataset as the previous question so no need to re-import it.
+
+```{r}
+# load packages
+library(rpart)
+library(randomForest)
+
+# review the crime dataset
+head(crime)
+```
+
+```{r}
+# build regression tree
+set.seed(42)
+tree_model <- rpart(Crime~., data=crime)
+summary(tree_model)
+```
+
+```{r}
+# plot regression tree
+plot(tree_model)
+text(tree_model)
+```
+
+```{r}
+# examine variable importance
+tree_model$variable.importance
+```
+
+```{r}
+# find r-squared
+ypred.tree <- predict(tree_model)
+RSS <- sum((ypred.tree-crime$Crime)^2) # the residual sum of squares
+TSS <- sum((mean(crime$Crime)-crime$Crime)^2)#the total sum of squares
+print(sprintf("R-Squared = %0.3f", 
+              R.squared.tree<-1-(RSS/TSS)))
+```
+
+Some observations:
+
+1.  Only 3 predictors were used in this regression tree: P01, Pop and NW
+2.  There are 4 leafs nodes and 2 branching points.
+3.  Each leaf contained 10-14 data points, more than 5% of the data. Structurally this tree is reasonable.
+
+**Question 10.1 (b)**
+
+For part (b), build a random forest model
+
+```{r}
+# build random forest model
+set.seed(42)
+rf_model <- randomForest(Crime~., data=crime, keep.forest=T, importance=T)
+rf_model
+```
+
+```{r}
+# importance of each predictor
+randomForest::importance(rf_model)
+```
+
+```{r}
+# plot of importance predictors
+varImpPlot(rf_model) 
+```
+
+```{r}
+# find r-squared
+ypred.RF <- predict(rf_model)
+RSS_rf <- sum((ypred.RF-crime$Crime)^2) # the residual sum of squares
+TSS_rf <- sum((mean(crime$Crime)-crime$Crime)^2)#the total sum of squares
+print(sprintf("R-Squared of Random Forest Model = %0.3f", 
+              R.squared.RF <- 1-(RSS_rf/TSS_rf)))
+```
+
+-   Overall R-Squared = 0.403 which is very reasonable (all data points & all factors). The introduction of Randomness to the Random Forest model really helped in reducing over-fitting
+
+**Question 10.2** Describe a situation or problem from your job, everyday life, current events, etc., for which a logistic regression model would be appropriate. List some (up to 5) predictors that you might use.
+
+Logistic regression models can be used in identifying potential bank customers that will default on loans. Some potential predictors might include:
+
+-   Credit score
+
+-   Monthly income
+
+-   Loan amount
+
+-   Age of customer
+
+**Question 10.3.1** Using the GermanCredit data set germancredit.txt from <http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german> / (description at <http://archive.ics.uci.edu/ml/datasets/Statlog+%28German+Credit+Data%29> ), use logistic regression to find a good predictive model for whether credit applicants are good credit risks or not. Show your model (factors used and their coefficients), the software output, and the quality of fit. You can use the `glm` function in R. To get a logistic regression (logit) model on data where the response is either zero or one, use `family=binomial(link=”logit”)` in your `glm` function call.
+
+```{r}
+library(caret)
+```
+
+```{r}
+# load data
+german <- read.table("../week 4 data-summer/data 10.3/germancredit.txt", sep=' ')
+head(german)
+```
+
+```{r}
+# update response column
+german$V21[german$V21==1]<-0
+german$V21[german$V21==2]<-1
+```
+
+```{r}
+# train test split
+rrow <- sample(1:nrow(german), as.integer(0.7*nrow(german), replace=F))
+train <- german[rrow,]
+test <- german[-rrow,]
+```
+
+```{r}
+# build model
+set.seed(42)
+logreg_model <- glm(V21~., family=binomial(link="logit"), data=train)
+summary(logreg_model)
+```
+
+Just like linear regression, remove insignificant predictors and re-train the model. Thus we have our logistic regression mode and software output:
+
+```{r}
+# re-train model with new predictors
+set.seed(42)
+logreg_model2 <- glm(V21~ V1+V2+V3+V4+V5+V6+V7+V8+V9+V10+V12+V14+V15+V16+V20,
+                     family=binomial(link="logit"), 
+                     data=train)
+summary(logreg_model2)
+```
+
+```{r}
+# generate predictions
+preds <- predict(logreg_model2, test, type="response")
+preds_rounded <- round(preds)
+```
+
+And the quality of fit of the logistic regression model:
+
+```{r}
+# confusion matrix and evaluation metrics
+confusionMatrix(as.factor(preds_rounded), as.factor(test$V21))
+```
+
+**Question 10.3.2** Because the model gives a result between 0 and 1, it requires setting a threshold probability to separate between “good” and “bad” answers. In this data set, they estimate that incorrectly identifying a bad customer as good, is 5 times worse than incorrectly classifying a good customer as bad. Determine a good threshold probability based on your model.
+
+Let's define the costs for correct and incorrect classifications. Print a simple confusion matrix to visualize this:
+
+```{r}
+# define costs
+costs = matrix(c(0, 5, 1, 0), nrow = 2)
+dimnames(costs) = list(Actual=c("good","bad"), 
+                       Predicted=c("good","bad"))
+print(costs)
+```
+
+We loop through each threshold (denoted `i/100`) and calculate the cost for that threshold. Then plot the cost against the range of thresholds.
+
+```{r}
+#initialize list 
+cost <- vector(mode = "list")
+for (i in 1:100){
+  preds_rounded <- as.integer(preds > i/100 )
+  cm_matrix <- as.matrix(table(test$V21, preds_rounded))
+
+  #Ensuring NO out of bounds issues while looping
+  if(nrow(cm_matrix)==2) {fp<-cm_matrix[2,1]} else {fp=0} 
+  if(ncol(cm_matrix)==2){fn<-cm_matrix[1,2]} else {fn=0}
+
+  cost<-c(cost, fn*1+fp*5)
+  }
+
+#Plots ov Total cost vs % thresholds
+plot(x=seq(0.01,1,by=0.01),
+     y=cost,
+     xlab="Threshold, %",
+     ylab="Cost of Misclassifications",
+     main="Cost vs Threshold")
+grid (10,10,lty=6)
+```
+
+```{r}
+numerator <- which.min(cost)
+min.threshold <-numerator/100
+print(sprintf("optimal threshold: %0.3f", min.threshold))
+```
+
+Finally obtain the minimum cost and its corresponding optimal threshold, which is 0.140.

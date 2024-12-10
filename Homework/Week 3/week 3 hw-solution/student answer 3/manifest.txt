@@ -1,0 +1,11 @@
+Filename: 0-Week-3-Homework-Markdown.pdf
+Description: Question 7.2 - Main
+Size: 290419
+
+Filename: 1-Week-3-Homework-Markdown--Part-2-.pdf
+Description: Question 8.2
+Size: 173521
+
+Filename: 2-7.2 - CUSUM.pdf
+Description: CUSUM calculation for the year 2000. All other years done identically, and calculations are explained thoroughly in file "7.2 - Main."
+Size: 35410

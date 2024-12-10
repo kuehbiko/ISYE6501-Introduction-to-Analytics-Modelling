@@ -1,0 +1,98 @@
+---
+title: "Week 6 homework"
+output: html_notebook
+---
+
+**Question 13.2**
+
+In this problem you, can simulate a simplified airport security system at a busy airport. Passengers arrive according to a Poisson distribution with λ~1~ = 5 per minute (i.e., mean interarrival rate m~1~ = 0.2 minutes) to the ID/boarding-pass check queue, where there are several servers who each have exponential service time with mean rate m~2~ = 0.75 minutes. [Hint: model them as one block that has more than one resource.] After that, the passengers are assigned to the shortest of the several personal-check queues, where they go through the personal scanner (time is uniformly distributed between 0.5 minutes and 1 minute).
+
+Use the Arena software (PC users) or Python with SimPy (PC or Mac users)to build a simulation of the system, and then vary the number of ID/boarding-pass checkers and personal-check queues to determine how many are needed to keep average wait times below 15 minutes. [If you’re using SimPy, or if you have access to a non-student version of Arena, you can use λ~1~ = 50 to simulate a busier airport.]
+
+**Question 14.1**
+
+The breast cancer data set breast-cancer-wisconsin.data.txt from <http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/>  (description at <http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+%28Original%29> ) has missing values.
+
+1.  Use the mean/mode imputation method to impute values for the missing data.
+2.  Use regression to impute values for the missing data.
+3.  Use regression with perturbation to impute values for the missing data.
+4.  (Optional) Compare the results and quality of classification models (e.g., SVM, KNN) build using - the data sets from questions 1,2,3; - the data that remains after data points with missing values are removed; and - the data set when a binary variable is introduced to indicate missing values.
+
+```{r}
+# import libraries
+library(Hmisc)
+library(mice)
+```
+
+```{r}
+# load data
+df<-read.table("../week 6 data-summer/data 14.1/breast-cancer-wisconsin.data.txt", 
+                header=F, sep=",", na.string="?")
+
+head(df,5)
+```
+
+```{r}
+# check amount of missing data
+sum(is.na(df))
+```
+
+```{r}
+# % of missing data
+print(sprintf("Percent of missing observation: %0.2f", 16/nrow(df)*100))
+```
+
+```{r}
+# mean imputation
+df.mean <- df
+df.mean <- df.mean %>% mutate_at(vars(Bare_Nuclei),
+                                 ~ifelse(is.na(.x), mean(.x, na.rm=T), .x))
+```
+
+```{r}
+# check imputation
+head(df.mean,24)
+```
+
+```{r}
+# check mean
+mean(df.mean$Bare_Nuclei)
+```
+
+```{r}
+# mode imputation
+# found this mode function in the internet
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+df.mode<-df
+mode.result <- getmode(df.mode$Bare_Nuclei)
+print(mode.result)
+```
+
+```{r}
+# imputation with regression
+```
+
+```{r}
+# imputation with regression with perturbation
+```
+
+**Question 15.1**
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which optimization would be appropriate. What data would you need?
+
+The re-balancing of bicycles at bike-sharing stations is an optimization problem. "Re-balancing" refers to the transport of bicycles from low traffic stations to high traffic stations by bike-sharing companies, usually by way of trucks. In this case, we are optimizing the cost and time to transport the bicycles against the profit earned through the use of these bicycles.
+
+Some data required is:
+
+-   Trip data - The distance, time taken, start and end locations of each trip.
+
+<!-- -->
+
+-   From the above, we can obtain traffic at each bike-sharing station - the number of bicycles at each station and the times at which each station is busiest. We can use this to determine where to move the bicycles from, and where to transport them to
+
+-   Using the start and end locations of each trip, we can also determine areas that are the busiest.
+
+-   Locations of bike-sharing stations and therefore distance between bike-sharing stations. Distance corresponds to the cost of transportation. This is different from start and end locations of *trips* as people may not always park bicycles at designated stations.

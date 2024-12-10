@@ -1,0 +1,276 @@
+---
+title: "week 5 homework"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+**Question 11.1**
+
+Using the crime data set uscrime.txt from Questions 8.2, 9.1, and 10.1, build a regression model using:
+
+1.  Stepwise regression
+2.  Lasso
+3.  Elastic net
+
+For Parts 2 and 3, remember to scale the data first – otherwise, the regression coefficients will be on different scales and the constraint won’t have the desired effect.
+
+For Parts 2 and 3, use the `glmnet` function in R. 
+
+Notes on R:
+
+-   For the elastic net model, what we called λ in the videos, glmnet calls “alpha”; you can get a range of results by varying alpha from 1 (lasso) to 0 (ridge regression) [and, of course, other values of alpha in between].
+
+-   In a function call like glmnet(x,y,family=”mgaussian”,alpha=1) the predictors x need to be in R’s matrix format, rather than data frame format.  You can convert a data frame to a matrix using as.matrix – for example, x \<- as.matrix(data[,1:n-1])
+
+-   Rather than specifying a value of T, glmnet returns models for a variety of values of T.
+
+```{r}
+library(stats)
+library(caret)
+library(dplyr)
+library(MASS)
+library(glmnet)
+```
+
+```{r}
+df <- read.table("../week 5 data-summer/data 11.1/uscrime.txt", header=T)
+head(df)
+```
+
+```{r}
+set.seed(42)
+
+# train test split
+random_row <- sample(1:nrow(df), as.integer(0.9*nrow(df),replace=F))
+
+traindata = df[random_row,]
+testdata = df[-random_row,]
+
+# setup k-fold cross-validation
+train.control <- trainControl(method="cv", number = 10)
+```
+
+```{r}
+# train stepwise model
+step_model <- train(Crime~.,data=traindata, method="lmStepAIC",
+                    trControl=train.control, trace=F)
+# model accuracy
+step_model$results
+```
+
+```{r}
+# model coefficients
+step_model$finalModel
+```
+
+```{r}
+# model summary
+summary(step_model$finalModel)
+```
+
+```{r}
+# train full stepwise model 
+full_model <- lm(Crime~M+Ed+Po1+U2+M.F+U1+U2+Ineq+Prob,
+                 data=traindata)
+
+# Stepwise regression model- in both directions
+stepfinal_model <- stepAIC(full_model, direction="both", trace=FALSE, k=2)
+
+# model accuracy
+summary(stepfinal_model)
+```
+
+```{r}
+# train full model with less predictors 
+full_model2 <- lm(Crime~M+Ed+Po1+Ineq+Prob, 
+                  data=traindata)
+
+# Stepwise regression model- in both directions
+stepfinal_model2 <- stepAIC(full_model2, direction="both", trace=FALSE, k=2)
+
+# model accuracy
+summary(stepfinal_model2)
+```
+
+```{r}
+#create the evaluation metrics function
+eval_metrics = function(model, df, predictions, target){
+    resids = df[,target] - predictions
+    resids2 = resids**2
+    N = length(predictions)
+    r2 = as.character(round(summary(model)$r.squared, 2))
+    adj_r2 = as.character(round(summary(model)$adj.r.squared, 2))
+    print(sprintf("adjusted r-squared: %s", adj_r2))
+    print(sprintf("rmse: %s", as.character(round(sqrt(sum(resids2)/N), 2))))
+}
+pred_train = predict(stepfinal_model2, newdata = (traindata))
+pred_test = predict(stepfinal_model2, newdata = testdata)
+```
+
+```{r}
+# model accuracy on train data
+print("metrics for training data")
+eval_metrics(stepfinal_model2, traindata, pred_train, target='Crime')
+```
+
+```{r}
+# model accuracy on test data
+print("metrics for test data")
+eval_metrics(stepfinal_model2, testdata, pred_test, target='Crime')
+```
+
+In part 1, we used cross-validation to select the most relevant predictors for our regression model. Then we used these relevant predictors to create a simple regression model. Finally we evaluate this simpler model on the training and test datasets.
+
+We can see that the R-squares for both training and test dataset is the same while RSME is better in test dataset than training dataset
+
+Part 2
+
+```{r}
+#scale data set
+xtrain<-scale(as.matrix(traindata)[,-16], center=T, scale=T)
+ytrain<-scale(as.matrix(traindata)[,16], center=T, scale=T)
+xtest<-scale(as.matrix(testdata)[,-16], center=T, scale=T)
+ytest<-scale(as.matrix(testdata)[,16], center=T, scale=T)
+```
+
+```{r}
+# train lasso model
+lasso_cv <- cv.glmnet(xtrain, ytrain, family="gaussian", alpha=1)
+
+#plot lasso cv
+plot(lasso_cv)
+```
+
+```{r}
+coef(lasso_cv)
+```
+
+```{r}
+best_lambda <- lasso_cv$lambda.min
+cat(best_lambda)
+```
+
+```{r}
+lasso_mod = glmnet(xtrain, ytrain, family="gaussian", alpha=1, lambda=best_lambda)
+coef(lasso_mod)
+```
+
+```{r}
+# Compute R^2 from true and predicted values
+eval_results <- function(true, predicted, df) {
+  SSE <- sum((predicted - true)^2)
+  SST <- sum((true - mean(true))^2)
+  R_square <- 1 - SSE / SST
+  RMSE = sqrt(SSE/nrow(df))
+
+  
+  # Model performance metrics
+data.frame(
+  RMSE = RMSE,
+  Rsquare = R_square)
+}
+
+# Prediction and evaluation on train data
+yhat.train = predict(lasso_mod, xtrain)
+eval_results(ytrain, yhat.train, traindata) 
+```
+
+```{r}
+# Prediction and evaluation on test data
+yhat.test = predict(lasso_mod, xtest)
+eval_results(ytest, yhat.test, testdata) 
+```
+
+```{r}
+x = 1:length(ytest)
+plot(x, ytest, ylim=c(min(yhat.test), max(ytest)), pch=20, col="red")
+lines(x, yhat.test, lwd="1", col="blue")
+legend("topleft", legend=c("Crime", "predicted-Crime"), col=c("red", "blue"), lty=1, cex=0.8, lwd=1, bty='n')
+```
+
+For part 2, we found the optimal lambda value to be 0.01988827. Using the optimal lambda value, we trained a lasso regression model and obtained metrics for both train and test datasets. We found that the RSME and R squares of the model were fairly similar for both datasets.
+
+The Lasso model RMSE metric however cannot be compared with the RMSE of the Stepwise model, since the Stepwise model was trained on unscaled data. Therefore, moving forwards, we will only use the R-squared value to compare models.
+
+Comparing the R-squared value of the Stepwise model (0.700) to that of the Lasso model (0.732), we can see that the R-squared value of the Lasso model is slightly better, as expected.
+
+Part 3
+
+```{r}
+# Set training control
+train_cont <- trainControl(method="repeatedcv",
+                           number=10,
+                           repeats=5,
+                           search="random",
+                           verboseIter=F)
+
+
+# Train the model
+elastic_reg <- train(Crime~.,data=as.matrix(scale(traindata)), method="glmnet",
+                     preProcess=c("center", "scale"),
+                     tuneLength=10, trControl=train_cont)
+```
+
+```{r}
+# Best tuning parameter
+elastic_reg$bestTune
+```
+
+```{r}
+# Make predictions on training set
+pred_train <- predict(elastic_reg, xtrain)
+eval_results(ytrain, pred_train, as.matrix(traindata)) 
+```
+
+```{r}
+# Make predictions on test set
+pred_test <- predict(elastic_reg, xtest)
+eval_results(ytest, pred_test, as.matrix(testdata))
+```
+
+```{r}
+x = 1:length(ytest)
+plot(x, ytest, ylim=c(min(pred_test), max(ytest)), pch=20, col="red")
+lines(x, pred_test, lwd="1", col="blue")
+legend("topleft", legend=c("Crime", "predicted-Crime"), col=c("red", "blue"), lty=1,cex = 0.8, lwd=1, bty='n')
+```
+
+There is no set alpha for Elastic Net regression, but by using the parameter `tuneLength = 10`, we can generate 10 combinations of values for alpha and lambda to test. Our best alpha and lambda values are then given from `elastic_reg$bestTune` to be alpha=0.8205803 and lambda=0.02098472.
+
+Comparing our models, we can see that our R-squared values for all three models are actually fairly similar, with the highest being the Lasso regression model (0.732), followed by the Elastic Net regression (0.731) and then the base Stepwise model (0.700).
+
+**Question 12.1**
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which a design of experiments approach would be appropriate.
+
+One application of a design of experiments approach is in process optimization/improvement in engineering. The engineers can identify key process variables and interactions to optimize them for desired outcomes.
+
+**Question 12.2**
+
+To determine the value of 10 different yes/no features to the market value of a house (large yard, solar roof, etc.), a real estate agent plans to survey 50 potential buyers, showing a fictitious house with different combinations of features.  To reduce the survey size, the agent wants to show just 16 fictitious houses. Use R’s `FrF2` function (in the `FrF2` package) to find a fractional factorial design for this experiment: what set of features should each of the 16 fictitious houses have?  Note: the output of `FrF2` is “1” (include) or  “-1” (don’t include) for each feature.
+
+```{r}
+library(FrF2)
+```
+
+```{r}
+house <- FrF2(nruns=16, nfactors=10, default.levels=c("Yes","No"))
+data.frame(house)
+```
+
+Based on the implementation of the fractional factorial design, for 10 features to be shown for 16 houses, we can create a matrix that gives us an idea of which houses have which features (A-K)
+
+**Question 13.1**
+
+For each of the following distributions, give an example of data that you would expect to follow this distribution (besides the examples already discussed in class).
+
+*Binomial:* A binomial distribution is used for observations where there can only be 2 outcomes, for example, if a person receives 20 emails per day and an email can be spam or not spam, and a binomial probability distribution can be used to determine the probability that a certain number of emails are spam.
+
+*Geometric:* A geometric distribution is a discrete probability distribution that describes the number of failures you observe before a success in a series of independent trials. One example of this would be how many times you roll a die before you get the number '6'.
+
+*Poisson:* A poisson distribution is used to model the probability of a certain number of events occurring independently within a fixed time interval. This could be the probability that a call center receives n calls per hour.
+
+*Exponential:* Exponential probability distributions model the time until a certain event occurs, for example, the time between phone calls in a call center.
+
+*Weibull:* The Weibull probability distribution is used to model the time-to-failure or the failure rate proportional to a power of time. For example, the amount of time a user spends on a webpage before they click away.

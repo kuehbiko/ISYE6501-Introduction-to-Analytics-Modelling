@@ -1,0 +1,252 @@
+---
+title: "week 3 homework"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+**Question 7.1**
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which exponential smoothing would be appropriate. What data would you need? Would you expect the value of a(the first smoothing parameter) to be closer to 0 or 1, and why?
+
+Exponential smoothing is a forecasting method for short-term forecasts. For example, it can be used in retail sales, to predict product demand over time, using data such as volume of product sales over a certain time period. In such a case where we are predicting something based in human behavior, the value of $\alpha$ would be closer to 0. This is to accommodate the high randomness associated with human behavior, and assigns a lower weightage to the current observation $x_{t}$.
+
+**Question 7.2**
+
+Using the 20 years of daily high temperature data for Atlanta (July through October) from Question 6.2 (file `temps.txt`), build and use an exponential smoothing model to help make a judgment of whether the unofficial end of summer has gotten later over the 20 years. (Part of the point of this assignment is for you to think about how you might use exponential smoothing to answer this question. Feel free to combine it with other models if you’d like to. There’s certainly more than one reasonable approach.)
+
+Note: in R, you can use either `HoltWinters` (simpler to use) or the `smooth` package’s `es` function (harder to use, but more general).  If you use `es`, the Holt-Winters model uses `model=”AAM”` in the function call (the first and second constants are used “A”dditively, and the third (seasonality) is used “M”ultiplicatively; the documentation doesn’t make that clear).
+
+We are using the `HoltWinters` function which is located in the `stats` package in R.
+
+```{r}
+library(stats)
+```
+
+```{r}
+set.seed(42)
+```
+
+```{r}
+# load data
+temp <- read.delim("../week 3 data-summer/data 7.2/temps.txt")
+head(temp)
+```
+
+First we will attempt to use single exponential smoothing with the `HoltWinters` function (<https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/HoltWinters>). Before we can use the `HoltWinters` function, we are required to create a time-series object of type `ts` (<https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/ts>) which we can do easily using the `ts` function.
+
+Per `HoltWinters` documentation: "The function tries to find the optimal values of $\alpha$, $\beta$ and $\gamma$ by minimizing [RMSE] if they are `NULL` (the default)". We will leave `alpha` to the default value of `NULL` and set `beta` and `gamma` to `False` as these are coefficients that represent trend and seasonality, which are not present in single exponential smoothing.
+
+```{r}
+# single exponential smoothing
+
+# convert temp data into time-series object
+temp_vector <- as.vector(unlist(temp[2:21]))
+temp_ts <- ts(temp_vector, start=1996, frequency=nrow(temp)) # beginning in 1996, nrorw(temp) observations per year
+
+# create simple exponential smoothing model
+model1 <- HoltWinters(temp_ts, # data
+                      beta=F,  # no trend
+                      gamma=F) # no seasonality (data is summer only)
+```
+
+```{r}
+model1$alpha
+```
+
+```{r}
+model1$beta
+```
+
+```{r}
+model1$gamma
+```
+
+The model has determined a high value of `alpha`, 0.8388021. This represents a higher weightage to observed data and less to the previous baseline and indicates that the randomness in our data is relatively low.
+
+Next, plot the time-series model:
+
+```{r}
+plot(model1$fitted)
+```
+
+Plotting the model, we can see the data has quite noticeable variations and there might be trends or seasonality hidden within the data. Trends and seasonality are represented by the `beta` and `gamma` parameters. This time, we will leave these two parameters as `NULL`, together with the `alpha` parameter so that the function will try to find the optimal values for all 3 coefficients. We also set the `seasonal` parameter to `"multiplicative"`.
+
+```{r}
+# double and triple exponential smoothing
+
+# convert temp data into time-series object
+temp_ts2 <- ts(temp_vector, start=1996, frequency=nrow(temp))
+
+# create general exponential smoothing model
+model2 <- HoltWinters(temp_ts2, 
+                      seasonal="multiplicative")
+```
+
+Let's see our coefficients:
+
+```{r}
+model2$alpha
+```
+
+```{r}
+model2$beta
+```
+
+```{r}
+model2$gamma
+```
+
+Our more general Holt-Winters model has indicated more randomness than the previous model ($\alpha$ = 0.615003) and the presence of seasonality ($\gamma$ = 0.549256), but no trending ($\beta$ = 0).
+
+```{r}
+plot(model2$fitted)
+```
+
+The decomposed plot of our Holt-Winters model also clearly shows the flat trend in the data.
+
+Overall, there is no discernible increasing or decreasing trend over the past 20 years. We can conclude that there is no statistical evidence to suggest an increase in summer temperatures, which corresponds with longer summers, from 1996 to 2015.
+
+**Question 8.1**
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which a linear regression model would be appropriate. List some (up to 5) predictors that you might use.
+
+Linear regressions can be used in businesses to understand the relationship between their business practices and revenue.
+
+Some possible predictors could include advertisement spending, number of outlets their product is available at and online store traffic.
+
+**Question 8.2**
+
+Using crime data from <http://www.statsci.org/data/general/uscrime.txt>  (file `uscrime.txt`, description at <http://www.statsci.org/data/general/uscrime.html> ), use regression (a useful R function is `lm` or `glm`) to predict the observed crime rate in a city with the following [[data:\\\\](data:){.uri}](%5Bdata:%5D(data:)%7B.uri%7D){.uri}\
+`M = 14.0`
+
+`So = 0`
+
+`Ed = 10.0`
+
+`Po1 = 12.0`
+
+`Po2 = 15.5`
+
+`LF = 0.640`
+
+`M.F = 94.0`
+
+`Pop = 150`
+
+`NW = 1.1`
+
+`U1 = 0.120`
+
+`U2 = 3.6`
+
+`Wealth = 3200`
+
+`Ineq = 20.1`
+
+`Prob = 0.04`
+
+`Time = 39.0`
+
+Show your model (factors used and their coefficients), the software output, and the quality of fit.
+
+**Note** that because there are only 47 data points and 15 predictors, you’ll probably notice some overfitting.  We’ll see ways of dealing with this sort of problem later in the course.
+
+We are using the `lm` function which is found in the `stats` package.
+
+```{r}
+library(stats)
+```
+
+```{r}
+set.seed(42)
+```
+
+```{r}
+crime <- read.delim("../week 3 data-summer/data 8.2/uscrime.txt")
+head(crime)
+```
+
+```{r}
+# create dataframe from sample input from question
+sample <- data.frame(M = 14.0,
+                     So = 0,
+                     Ed = 10.0,
+                     Po1 = 12.0, 
+                     Po2 = 15.5,
+                     LF = 0.640,
+                     M.F = 94.0,
+                     Pop = 150,
+                     NW = 1.1,
+                     U1 = 0.120,
+                     U2 = 3.6, 
+                     Wealth = 3200, 
+                     Ineq = 20.1, 
+                     Prob = 0.04, 
+                     Time = 39.0)
+```
+
+Here we create a simple linear regression model. Train it on the base `uscrime` dataset, without any scaling or normalization of data. Run the baseline model, and observe our model summary and model error.
+
+```{r}
+# train linear regression model
+model3 <- lm(Crime~.,
+             data=crime)
+
+# get summary of baseline model
+summary(model3)
+```
+
+```{r}
+# get RMSE of baseline model
+sigma(model3)
+```
+
+Predict a crime rate based on the sample data.
+
+```{r}
+# regression prediction based on sample
+test <- predict(model3, sample)
+test
+```
+
+```{r}
+# reponses of training dataset
+summary(crime$Crime)
+```
+
+Our model has predicted a crime rate of 155.43. Even simply eyeballing at the spread of responses in the training dataset, we can see that our model's prediction is extremely low. It's even lower than the minimum response in the training dataset which is 342.
+
+A possible reason is that our model was not trained properly, and all the predictors were used regardless of significance to the model. This could have resulted in overfitting on predictors that were not statistically significant.
+
+Let's try a new model using only significant predictors. We will select predictors with a p-value \< 0.05.
+
+```{r}
+# train new model with only statistically significant predictors
+model4 <- lm(Crime~M+Ed+Po1+U2+Ineq+Prob, 
+             data=crime)
+
+# get summary of new model
+summary(model4)
+```
+
+```{r}
+# get RMSE of baseline model
+sigma(model4)
+```
+
+This model is a better model than our previous model, with a lower RMSE of 200 instead of 209. Additionally, the p-value, the R-squared value and F-statistic are still reasonable with our new coefficients. We can be more confident about this model than the previous one.
+
+And we can say that our final linear equation is:
+
+`Crime = -5040.50 + 105.02M + 196.47Ed + 115.02Pol + 89.37U2 + 67.65Ineq - 3801.84Prob`
+
+Finally, generate a prediction:
+
+```{r}
+# new regression prediction from sample data
+test2 <- predict(model4, sample)
+test2
+```
+
+Thus we have predicted an observed crime rate based on the provided sample data to be 1304.245.
